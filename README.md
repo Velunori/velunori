@@ -9,17 +9,26 @@ A complete desktop suite for Omarchy: floating bars, coordinated panels, a Seren
 Use an **unlocked Omarchy desktop terminal**, as your normal user. You need Omarchy's shell plugin API, Git, Python 3 with `venv`/pip, and the existing Omarchy tools used by the components (`pactl`, `ip`, `hyprctl`, `systemd-run` and `checkupdates`). Components were developed against **Omarchy 4.0.6-1**; compatibility with every newer release is not guaranteed. The lock installer checks that its service matches your installed Omarchy service before activation.
 
 ```bash
-git clone --recurse-submodules https://github.com/Velunori/velunori.git ~/dev/velunori
-cd ~/dev/velunori
+git clone --recurse-submodules https://github.com/Velunori/velunori.git ~/.local/share/velunori
+cd ~/.local/share/velunori
+bash scripts/install.sh --check
 bash scripts/install.sh --dry-run
 bash scripts/install.sh
 ```
 
 The installer sets up calendar dependencies in `components/clock/.venv`, then installs core, clock, Control Center, notifications, menu, weather, update, the Serene lock screen and the theme. The theme is applied immediately; panels replace their corresponding built-in components and the shell restarts during installation. The update component is installed without running a system update. Installing the lock screen does not lock the desktop or authenticate you.
 
-**Keep this checkout in place.** Plugins link to `components/`; moving or deleting it breaks those links. Each component is a Git submodule pinned to a specific commit, so everyone cloning this revision gets the same source versions. This is a source installation, not a system package, and installs no system packages automatically.
+`--check` is a read-only prerequisite check: it inspects selected source files, required commands, Python environment support, shell configuration, the current desktop session, installation links, active replacement conflicts, and the selected theme/lock prerequisites. It reports multiple failures together, without creating backups, links or virtual environments, downloading packages, restarting the shell, or invoking authentication. It exits with `0` when prerequisites pass and `1` when they fail; invalid options exit with `2`. It does not verify network access, live UI behavior or cloud sign-in. A real installation runs the same checks before making changes.
+
+`--dry-run` only prints the install plan; it does not query the live session or validate runtime prerequisites. Use it separately from `--check`.
+
+The examples use `~/.local/share/velunori` for a new installation; another permanent directory is fine. **Keep this checkout in place.** Plugins link to `components/`; moving or deleting it breaks those links. Each component is a Git submodule pinned to a specific commit, so everyone cloning this revision gets the same source versions. This is a source installation, not a system package, and installs no system packages automatically.
 
 Already cloned without submodules? Run `git submodule update --init --recursive` first. If you already have Velunori linked from another checkout, the installer stops before changing the desktop; keep using the existing component installers or deliberately migrate those links before switching to this bundle.
+
+## Versioned releases
+
+For a pinned release rather than the development branch, follow [release installation and updates](docs/releases.md). See [CHANGELOG.md](CHANGELOG.md) for release scope and validation limits. Release candidates are previews; they do not establish live desktop or cloud compatibility.
 
 ## Choose what to install
 
@@ -30,7 +39,7 @@ bash scripts/install.sh --without-theme --without-lockscreen
 bash scripts/install.sh --without-cloud
 ```
 
-Flags can be combined with `--dry-run`. Without cloud dependencies, the clock and editable local calendar still work. To add Google/iCloud support later:
+Use the same selection flags with `--check`, `--dry-run` and the actual installation. For example, `bash scripts/install.sh --check --without-theme --without-lockscreen` checks only that selection. `--check` and `--dry-run` are separate modes and cannot be combined. Without cloud dependencies, the clock and editable local calendar still work. To add Google/iCloud support later:
 
 ```bash
 bash components/clock/scripts/setup-deps.sh
@@ -64,13 +73,14 @@ The Serene lock screen has a preview that does not lock or accept passwords: `om
 ## Update the suite
 
 ```bash
-cd ~/dev/velunori
+cd ~/.local/share/velunori
 git pull --ff-only
 git submodule update --init --recursive
+bash scripts/install.sh --check
 bash scripts/install.sh
 ```
 
-Reuse your original install flags if you skipped the theme, lock screen or cloud dependencies. Submodule updates change linked plugin files and can trigger shell reloads; update from a desktop terminal when convenient. Local modifications can prevent an update; preserve your work rather than discarding it. Avoid `git submodule update --remote` unless you deliberately want component revisions outside the bundle's pinned set.
+If you installed in a different directory, use that path instead. Keep existing installations in place: moving the checkout breaks plugin links. Reuse your original install flags if you skipped the theme, lock screen or cloud dependencies. Submodule updates change linked plugin files and can trigger shell reloads; update from a desktop terminal when convenient. Local modifications can prevent an update; preserve your work rather than discarding it. Avoid `git submodule update --remote` unless you deliberately want component revisions outside the bundle's pinned set.
 
 ## Recovery
 

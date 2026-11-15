@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 suite_dir=$(cd "$(dirname "$0")/.." && pwd -P)
 dry_run=false
+check_only=false
 theme=true
 lockscreen=true
 cloud=true
@@ -14,6 +15,7 @@ Installs core, clock, Control Center, notifications, menu, weather, update,
 Serene lock screen, the theme, and private calendar dependencies.
 
   --dry-run             Print the plan without executing installers or pip
+  --check               Check selected prerequisites without changing anything
   --without-theme       Keep the current Omarchy theme
   --without-lockscreen  Keep the current lock screen
   --without-cloud       Skip calendar dependency setup (local calendar still works)
@@ -23,6 +25,7 @@ EOF
 for arg in "$@"; do
   case "$arg" in
     --dry-run) dry_run=true ;;
+    --check) check_only=true ;;
     --without-theme) theme=false ;;
     --without-lockscreen) lockscreen=false ;;
     --without-cloud) cloud=false ;;
@@ -30,17 +33,31 @@ for arg in "$@"; do
     *) printf 'Unknown option: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
   esac
 done
+if [[ $dry_run == true && $check_only == true ]]; then
+  echo 'Use --check or --dry-run separately: one checks prerequisites, the other prints the plan.' >&2
+  exit 2
+fi
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 plugins=(core clock control-center notifications menu weather update)
 [[ $lockscreen == false ]] || plugins+=(lockscreen)
 components=("${plugins[@]}")
 [[ $theme == false ]] || components+=(theme)
-for component in "${components[@]}"; do
-  [[ -f "$suite_dir/components/$component/scripts/install-local.sh" ]] ||
-    fail 'Missing components. Run: git submodule update --init --recursive'
-done
-if [[ $cloud == true ]]; then
-  [[ -f "$suite_dir/components/clock/scripts/setup-deps.sh" ]] || fail 'Missing calendar dependency installer.'
+if [[ $dry_run == true ]]; then
+  for component in "${components[@]}"; do
+    [[ -f "$suite_dir/components/$component/scripts/install-local.sh" ]] ||
+      fail 'Missing components. Run: git submodule update --init --recursive'
+  done
+  if [[ $cloud == true ]]; then
+    [[ -f "$suite_dir/components/clock/scripts/setup-deps.sh" ]] || fail 'Missing calendar dependency installer.'
+  fi
+else
+  command -v python3 >/dev/null || fail 'Missing required command: python3'
+  preflight_args=("$suite_dir")
+  [[ $theme == true ]] || preflight_args+=(--without-theme)
+  [[ $lockscreen == true ]] || preflight_args+=(--without-lockscreen)
+  [[ $cloud == true ]] || preflight_args+=(--without-cloud)
+  python3 -B "$suite_dir/scripts/preflight.py" "${preflight_args[@]}"
+  if [[ $check_only == true ]]; then exit 0; fi
 fi
 run() {
   printf '  '; printf '%q ' "$@"; printf '\n'
@@ -49,26 +66,6 @@ run() {
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
 backup=''
 if [[ $dry_run == false ]]; then
-  (( EUID != 0 )) || fail 'Run as your desktop user, without sudo.'
-  for executable in python3 omarchy omarchy-shell pactl ip hyprctl systemd-run checkupdates omarchy-update; do
-    command -v "$executable" >/dev/null || fail "Missing required command: $executable"
-  done
-  [[ -f "$config_dir/shell.json" ]] || fail 'Missing Omarchy shell.json.'
-  [[ -n ${XDG_RUNTIME_DIR:-} && -d $XDG_RUNTIME_DIR ]] || fail 'Run inside your Omarchy desktop session (XDG_RUNTIME_DIR is required).'
-  [[ $(omarchy-shell shell ping) == ok ]] || fail 'Omarchy shell is not running.'
-  for plugin in "${plugins[@]}"; do
-    destination="$config_dir/plugins/velunori.$plugin"
-    if [[ -e $destination || -L $destination ]]; then
-      [[ -L $destination && $(readlink -f "$destination") == "$suite_dir/components/$plugin" ]] ||
-        fail "Another installation exists at $destination. Use its checkout or remove it deliberately before switching."
-    fi
-  done
-  if [[ $lockscreen == true ]]; then
-    cmp -s "$suite_dir/components/lockscreen/Service.qml" "${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins/lock/Service.qml" ||
-      fail 'Lock service differs from this Omarchy version. See the lockscreen README or use --without-lockscreen.'
-    [[ -r /etc/pam.d/omarchy-lock-password ]] || fail 'Omarchy lock PAM configuration is missing.'
-    [[ $(omarchy-shell lock isLocked) == false ]] || fail 'Run from an unlocked desktop.'
-  fi
   backup=$(mktemp "$config_dir/shell.json.before-velunori-suite.XXXXXXXX")
   cp -p "$config_dir/shell.json" "$backup"
   printf 'Original shell configuration: %s\n' "$backup"
