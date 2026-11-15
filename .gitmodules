@@ -1,0 +1,27 @@
+[submodule "components/core"]
+	path = components/core
+	url = https://github.com/Velunori/core.git
+[submodule "components/clock"]
+	path = components/clock
+	url = https://github.com/Velunori/clock.git
+[submodule "components/control-center"]
+	path = components/control-center
+	url = https://github.com/Velunori/control-center.git
+[submodule "components/notifications"]
+	path = components/notifications
+	url = https://github.com/Velunori/notifications.git
+[submodule "components/menu"]
+	path = components/menu
+	url = https://github.com/Velunori/menu.git
+[submodule "components/weather"]
+	path = components/weather
+	url = https://github.com/Velunori/weather.git
+[submodule "components/lockscreen"]
+	path = components/lockscreen
+	url = https://github.com/Velunori/lockscreen.git
+[submodule "components/theme"]
+	path = components/theme
+	url = https://github.com/Velunori/theme.git
+[submodule "components/update"]
+	path = components/update
+	url = https://github.com/Velunori/update.git
