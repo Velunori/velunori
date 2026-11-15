@@ -92,6 +92,12 @@ Bundle tests exercise installation order, options and failures with stand-in com
 
 Report bundle installation problems in [this repository's issues](https://github.com/Velunori/velunori/issues); component-specific problems belong in that component's repository. Include your Omarchy version and relevant error output, with credentials removed.
 
+## Contributing and support
+
+Read the shared [contribution guidelines](https://github.com/Velunori/.github/blob/main/CONTRIBUTING.md) for repository selection, development setup and validation. Use the [issue forms](https://github.com/Velunori/velunori/issues/new/choose) for bundle bugs, installation problems, suggestions or questions; component issues belong in their respective repositories.
+
+See [support](https://github.com/Velunori/.github/blob/main/SUPPORT.md) and our [Code of Conduct](https://github.com/Velunori/.github/blob/main/CODE_OF_CONDUCT.md). Report suspected vulnerabilities through [private security reporting](https://github.com/Velunori/.github/blob/main/SECURITY.md), rather than public issues.
+
 ## License
 
 MIT. See [LICENSE](LICENSE); each component retains its own license and third-party notices.
