@@ -414,7 +414,8 @@ class Installer:
         ui.out('    '+ui.dim('Nothing changes until you confirm. The shell restarts during installation;'))
         ui.out('    '+ui.dim('no system update runs and no accounts are connected.'))
         ui.out()
-        if confirm('  Type '+ui.strong('INSTALL')+' to continue '+ui.mark('arrow')+' ').strip() != 'INSTALL':
+        # Default is no: an empty answer or anything but yes changes nothing.
+        if confirm('  Install Velunori now? '+ui.strong('[y/N]')+' '+ui.mark('arrow')+' ').strip().lower() not in ('y','yes'):
             raise ValueError('Installation cancelled. Nothing was changed.')
         with self.lock():
             if not self.check(selected,cloud,quiet=True):

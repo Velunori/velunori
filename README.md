@@ -12,7 +12,7 @@ Use an **unlocked Omarchy desktop terminal**, as your normal user, without `sudo
 curl -fsSL https://velunori.github.io/install.sh | bash -s -- --all
 ```
 
-Omit `--all` to choose components interactively, or pick them on [velunori.github.io](https://velunori.github.io/). The script is self-contained: it carries the runtime files of every component from this repository's pinned submodules, so nothing is cloned and no system packages are installed. It shows the plan, checks prerequisites and asks you to type `INSTALL` before changing anything.
+Omit `--all` to choose components interactively, or pick them on [velunori.github.io](https://velunori.github.io/). The script is self-contained: it carries the runtime files of every component from this repository's pinned submodules, so nothing is cloned and no system packages are installed. It shows the plan, checks prerequisites and asks for a yes/no confirmation (default no) before changing anything.
 
 Prefer to read it first? Download it, compare its checksum with [`install.sh.sha256`](https://velunori.github.io/install.sh.sha256), then run the same actions locally:
 

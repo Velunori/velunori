@@ -84,7 +84,7 @@ class BootstrapTests(unittest.TestCase):
     def test_real_payload_installs_copies_using_standin_host(self):
         with tempfile.TemporaryDirectory() as temporary:
             home=Path(temporary);env=self.environment(home)
-            result=subprocess.run(['bash',str(self.script),'install','--components','clock,control-center'],input='INSTALL\n',env=env,capture_output=True,text=True,timeout=30)
+            result=subprocess.run(['bash',str(self.script),'install','--components','clock,control-center'],input='yes\n',env=env,capture_output=True,text=True,timeout=30)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             plugins=home/'config/omarchy/plugins'
             self.assertTrue((plugins/'lib/kit/Theme.qml').is_file())
@@ -113,7 +113,7 @@ class BootstrapTests(unittest.TestCase):
             output=b'';sent=set();status=None
             try:
                 deadline=time.monotonic()+30
-                answers=[(b'Choose 1 or 2',b'2\n'),(b'comma-separated',b'control-center\n'),(b'to continue',b'INSTALL\n')]
+                answers=[(b'Choose 1 or 2',b'2\n'),(b'comma-separated',b'control-center\n'),(b'[y/N]',b'y\n')]
                 while time.monotonic()<deadline:
                     if select.select([fd],[],[],.1)[0]:
                         try:data=os.read(fd,65536)

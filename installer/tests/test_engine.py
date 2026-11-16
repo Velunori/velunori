@@ -52,7 +52,7 @@ class InstallerTests(unittest.TestCase):
     def test_slow_rescan_reported_as_unresponsive_still_installs(self):
         # omarchy-shell reports "not responding" while the shell loads new plugins.
         self.slow_rescan=True
-        self.installer.install(self.select(['clock']),confirm=lambda _:'INSTALL')
+        self.installer.install(self.select(['clock']),confirm=lambda _:'y')
         self.assertEqual(json.loads(self.installer.receipt.read_text())['phase'],'installed')
 
     def run_command(self,*args,capture=False,timeout=60):
@@ -78,7 +78,7 @@ class InstallerTests(unittest.TestCase):
         self.selected=self.installer.select(names,cloud=cloud);return self.selected
 
     def install(self,names,cloud=False):
-        return self.installer.install(self.select(names,cloud),cloud,confirm=lambda _:'INSTALL')
+        return self.installer.install(self.select(names,cloud),cloud,confirm=lambda _:'y')
 
     def receipt(self):return json.loads(self.installer.receipt.read_text())
 
@@ -114,6 +114,8 @@ class InstallerTests(unittest.TestCase):
     def test_install_requires_confirmation(self):
         with self.assertRaisesRegex(ValueError,'cancelled'):
             self.installer.install(self.select(['clock']),confirm=lambda _:'no')
+        with self.assertRaisesRegex(ValueError,'cancelled'):
+            self.installer.install(self.select(['clock']),confirm=lambda _:'')
         self.assertFalse(self.installer.prefix.exists());self.assertEqual(self.installer.config.read_bytes(),self.before)
 
     def test_existing_plugin_and_data_directory_are_preserved(self):
