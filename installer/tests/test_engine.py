@@ -156,7 +156,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_failed_restart_restores_config_and_preserves_files_in_recovery(self):
         self.fail_restart=True
-        with self.assertRaisesRegex(ValueError,'enabled after shell restart'):self.install(['clock'])
+        with self.assertRaisesRegex(ValueError,'after the shell restart'):self.install(['clock'])
         self.assertEqual(self.installer.config.read_bytes(),self.before)
         self.assertFalse((self.installer.plugins/'velunori.clock').exists())
         self.assertTrue((self.installer.prefix/'recovery/velunori.clock').is_dir())
@@ -209,7 +209,8 @@ class ConfigurationTests(unittest.TestCase):
     def test_lock_service_and_prior_disabled_source_are_preserved(self):
         before={'version':1,'bar':{'id':'omarchy.bar'},'disabledPlugins':['omarchy.lock']}
         result=engine.configuration(before,self.selected('lockscreen'))
-        self.assertIn('velunori.lockscreen',result['plugins'])
+        self.assertIn({'id':'velunori.lockscreen'},result['plugins'])
+        self.assertTrue(all(isinstance(entry,dict) for entry in result['plugins']))
         self.assertNotIn('cloneSourceRestores',result)
     def test_theme_only_does_not_select_a_bar_or_widget(self):
         before={'version':1,'bar':{'id':'omarchy.bar','layout':{}},'plugins':[]}

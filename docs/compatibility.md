@@ -26,7 +26,7 @@ Every row ran the component's own `bash scripts/check.sh` from this repository's
 | clock | `f8d54f0c07abc1a4f2def5956459b3542063f441` | Passed, copied and symlinked |
 | control-center | `e5734acf3465912d5cd1af6ad183f32133758e9d` | Passed, copied and symlinked |
 | notifications | `37fa89991b8d7f7c36b02eeaacd368bffbd565d2` | Passed, copied and symlinked |
-| menu | `618b7b969b99320f682792ba65b12c1df8b3df0f` | Passed, copied and symlinked |
+| menu | `a933495c945f6b5c2d958d65600e261566c608e1` | Passed, copied and symlinked |
 | weather | `15b1fe2cf32ac34ea43c43fd60bb509fead16f2a` | Passed, copied and symlinked |
 | update | `7b372c28476fe5add302416427841ae41dd8bae4` | Passed, copied and symlinked |
 | lockscreen | `c50e6cbee7309d5d630dc6f907520f61740008be` | Passed, copied and symlinked |

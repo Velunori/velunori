@@ -178,7 +178,8 @@ def configuration(before, selected):
                 layout.setdefault(component['section'], []).append({'id':plugin})
             plugins[:] = [entry for entry in plugins if identity(entry) != plugin]
         elif plugin not in [identity(entry) for entry in plugins]:
-            plugins.append(plugin)
+            # Omarchy reads plugins[i].id; a bare string entry is ignored and the plugin stays disabled.
+            plugins.append({'id':plugin})
     if not disabled:
         result.pop('disabledPlugins', None)
     if not restores:
@@ -396,6 +397,14 @@ class Installer:
         except (ValueError,TypeError,AttributeError):
             return False
 
+    def not_enabled(self, selected):
+        try:
+            inventory=json.loads(self.query('omarchy-shell','shell','listPlugins') or 'null') or []
+        except ValueError:
+            inventory=[]
+        enabled={p.get('id') for p in inventory if isinstance(p,dict) and p.get('enabled')}
+        return [item['id'] for item in selected if item.get('id') and item['id'] not in enabled]
+
     def install(self, selected, cloud=False, confirm=input, bootstrap=None):
         ui=self.ui
         self.plan(selected,cloud)
@@ -476,7 +485,7 @@ class Installer:
                 if any(x.get('id') for x in selected):
                     with ui.step('Restart the shell with Velunori'):
                         if self.run('omarchy','restart','shell').returncode or not self.wait_for(lambda:self.query('omarchy-shell','shell','ping')=='ok' and self.inventory_ready(selected,True)):
-                            raise ValueError('Selected plugins did not become enabled after shell restart.')
+                            raise ValueError('Not enabled after the shell restart: '+(', '.join(self.not_enabled(selected)) or 'the shell did not answer')+'.')
                 if any(x['name']=='theme' for x in selected):
                     with ui.step('Apply the Dusk theme'):
                         shutil.copytree(self.package/'components/theme',self.prefix/'theme')
@@ -515,7 +524,6 @@ class Installer:
                         receipt['phase']='needs-recovery'
                 else:
                     receipt['phase']='needs-recovery'
-                    print('Configuration changed or restoration failed. Installed files were retained; review the saved snapshot.',file=sys.stderr)
                 if theme_attempted and previous_theme and (self.query('omarchy','theme','current') or '').lower()=='velunori':
                     if self.run('omarchy','theme','set',previous_theme).returncode:
                         receipt['phase']='needs-recovery'
@@ -523,7 +531,8 @@ class Installer:
                 if receipt['phase']=='failed-restored':
                     ui.out('    '+ui.mark('ok')+' Your previous configuration is back; new files were moved to '+tilde(self.prefix/'recovery'))
                 else:
-                    ui.out('    '+ui.mark('fail')+' Some changes could not be undone automatically; see '+tilde(self.prefix))
+                    ui.out('    '+ui.mark('fail')+' shell.json changed after installation, so it was not overwritten.')
+                    ui.out('      '+ui.dim('Installed files were kept. Previous configuration: '+tilde(self.prefix/'backups/shell.before.json')))
                 raise ValueError(str(error)+' Log: '+tilde(self.prefix/'install.log')) from error
             finally:
                 if self.log:
