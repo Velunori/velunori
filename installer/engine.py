@@ -13,8 +13,82 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
+
+
+class Style:
+    """Terminal presentation in the Velunori palette; plain text when not a colour terminal."""
+    def __init__(self, stream=None):
+        self.stream = stream or sys.stdout
+        self.color = self.stream.isatty() and 'NO_COLOR' not in os.environ and os.environ.get('TERM') != 'dumb'
+        self.unicode = (self.stream.encoding or '').lower().replace('-', '') in ('utf8', 'utf_8')
+
+    def paint(self, text, rgb, bold=False):
+        if not self.color:
+            return text
+        r, g, b = rgb
+        return f"\033[{'1;' if bold else ''}38;2;{r};{g};{b}m{text}\033[0m"
+
+    def accent(self, text, bold=False): return self.paint(text, (196, 175, 241), bold)
+    def good(self, text): return self.paint(text, (160, 221, 191))
+    def bad(self, text): return self.paint(text, (240, 166, 166), True)
+    def warn(self, text): return self.paint(text, (232, 223, 209))
+    def dim(self, text): return self.paint(text, (138, 133, 152))
+    def strong(self, text): return self.paint(text, (238, 237, 243), True)
+
+    def mark(self, kind):
+        symbols = {'ok': ('✓', 'ok'), 'fail': ('✗', 'x'), 'on': ('●', '*'), 'off': ('○', '-'), 'brand': ('◆', '*'), 'arrow': ('›', '>')}
+        symbol = symbols[kind][0 if self.unicode else 1]
+        return {'ok': self.good, 'fail': self.bad, 'on': self.accent, 'off': self.dim, 'brand': lambda s: self.accent(s, True), 'arrow': self.accent}[kind](symbol)
+
+    def out(self, text=''):
+        print(text, file=self.stream, flush=True)
+
+    def header(self, version):
+        self.out()
+        self.out('  ' + self.mark('brand') + ' ' + self.strong('Velunori') + '  ' + self.dim(version))
+        self.out('    ' + self.dim('A softer edge for Omarchy'))
+
+    def section(self, title):
+        self.out()
+        self.out('  ' + self.accent(title, True))
+
+    @contextmanager
+    def step(self, label):
+        """Show a running step with a spinner on a terminal; always end with a result line."""
+        started = time.monotonic()
+        state = {'detail': ''}
+        stop = threading.Event()
+        frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' if self.unicode else '|/-\\'
+        def spin():
+            index = 0
+            while not stop.wait(.08):
+                self.stream.write('\r\033[2K    ' + self.accent(frames[index % len(frames)]) + ' ' + label + self.dim('  ' + format_seconds(time.monotonic() - started)))
+                self.stream.flush(); index += 1
+        spinner = threading.Thread(target=spin, daemon=True) if self.color else None
+        if spinner: spinner.start()
+        try:
+            yield state
+        except BaseException:
+            stop.set()
+            if spinner: spinner.join(); self.stream.write('\r\033[2K')
+            self.out('    ' + self.mark('fail') + ' ' + label)
+            raise
+        stop.set()
+        if spinner: spinner.join(); self.stream.write('\r\033[2K')
+        detail = ('  ' + state['detail']) if state['detail'] else ''
+        self.out('    ' + self.mark('ok') + ' ' + label + self.dim(detail + '  ' + format_seconds(time.monotonic() - started)))
+
+
+def format_seconds(value):
+    return f'{value:.1f}s' if value < 60 else f'{int(value // 60)}m {int(value % 60):02d}s'
+
+
+def tilde(path):
+    path = str(path); home = str(Path.home())
+    return '~' + path[len(home):] if path == home or path.startswith(home + '/') else path
 
 
 def ask(prompt):
@@ -125,6 +199,9 @@ class Installer:
         self.receipt = self.prefix / 'installation.json'
         self.omarchy = Path(os.environ.get('OMARCHY_PATH', '/usr/share/omarchy'))
         self.pam = Path('/etc/pam.d/omarchy-lock-password')
+        self.ui = Style()
+        self.verbose = False
+        self.log = None
 
     def select(self, names=None, all_components=False, cloud=False):
         available = {item['name']:item for item in self.catalog['components']}
@@ -142,12 +219,19 @@ class Installer:
         return any(item['name'] != 'theme' for item in selected)
 
     def run(self, *args, capture=False, timeout=60):
-        return subprocess.run(list(map(str,args)), capture_output=capture, text=True, timeout=timeout,
-                              env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+        # The shell blocks for several seconds while it loads newly copied plugins; omarchy-shell's
+        # default 2 s IPC timeout would report it as not responding even though the call ran.
+        env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'}
+        env.setdefault('OMARCHY_SHELL_IPC_TIMEOUT','20s')
+        if not capture and self.log:
+            # Tool output (pip, theme, shell restarts) goes to the install log, not the screen.
+            self.log.write('\n$ ' + ' '.join(map(str,args)) + '\n'); self.log.flush()
+            return subprocess.run(list(map(str,args)), stdout=self.log, stderr=subprocess.STDOUT, text=True, timeout=timeout, env=env)
+        return subprocess.run(list(map(str,args)), capture_output=capture, text=True, timeout=timeout, env=env)
 
     def query(self, *args):
         try:
-            result = self.run(*args, capture=True, timeout=5)
+            result = self.run(*args, capture=True, timeout=30)
             return result.stdout.strip() if result.returncode == 0 else None
         except (OSError, subprocess.TimeoutExpired):
             return None
@@ -167,35 +251,43 @@ class Installer:
         return info['build']
 
     def plan(self, selected, cloud=False):
-        print('Velunori ' + self.catalog['version'] + ' — installation plan')
-        print('Components: ' + ', '.join(item['title'] for item in selected))
-        print('Shared library: ' + ('API 1, included automatically; no bar activated' if self.needs_library(selected) else 'not required'))
-        print('Calendar cloud libraries: ' + ('download into the clock private environment' if cloud else 'not selected'))
-        print('Floating Bars: ' + ('will replace the selected bar' if any(x['name']=='bar' for x in selected) else 'not selected; current bar stays in place'))
-        print('Plugin location: ' + str(self.plugins))
-        print('Receipt and backups: ' + str(self.prefix))
-        print('Files are copied; no workspace shortcuts or source links are created.')
-        if any(x['name']=='theme' for x in selected):
-            print('Dusk: WILL apply theme and wallpaper immediately.')
-        if any(x['name']=='lockscreen' for x in selected):
-            print('Serene: selected; unchanged Omarchy lock service must match. No locking/authentication test is run.')
-        print('Installation may restart the shell. It never runs a system update or connects accounts.')
+        ui=self.ui
+        names={x['name'] for x in selected}
+        notes={'bar':'Island or Orbit, replaces your current bar','clock':'with Google/iCloud libraries' if cloud else 'local calendars · add --cloud for Google/iCloud',
+               'control-center':'sound, displays, network, capture, reminders','notifications':'cards and session history',
+               'menu':'two-pane command menu','weather':'saved cities and the week ahead','update':'a window for Omarchy updates',
+               'theme':'palette and wallpaper, applied immediately','lockscreen':'on Omarchy\'s own lock service'}
+        ui.header(self.catalog['version'])
+        ui.section('Plan')
+        width=max(len(x['title']) for x in self.catalog['components'])+2
+        for item in self.catalog['components']:
+            chosen=item['name'] in names
+            note=notes.get(item['name'],'') if chosen else 'not selected'
+            ui.out('    '+ui.mark('on' if chosen else 'off')+' '+(item['title'].ljust(width) if chosen else ui.dim(item['title'].ljust(width)))+ui.dim(note))
+        if self.needs_library(selected):
+            ui.out('    '+ui.mark('on')+' '+'Shared library'.ljust(width)+ui.dim('added automatically'))
+        if 'bar' not in names:
+            ui.out()
+            ui.out('    '+ui.dim('Your current bar stays in place.'))
+        ui.out()
+        ui.out('    '+ui.dim('Plugins'.ljust(9))+tilde(self.plugins))
+        ui.out('    '+ui.dim('Receipt'.ljust(9))+tilde(self.prefix))
 
-    def check(self, selected, cloud=False):
+    def check(self, selected, cloud=False, quiet=False):
         self.verify()
         failures = []
-        def require(condition, message):
-            print(('OK   ' if condition else 'FAIL ') + message)
-            if not condition:
-                failures.append(message)
-        require(os.geteuid() != 0, 'Run as your desktop user, without sudo.')
+        passed = []
+        def require(condition, message, hint=''):
+            if condition: passed.append(message)
+            else: failures.append((message, hint))
+        require(os.geteuid() != 0, 'Run as your desktop user, without sudo.', 'Run the installer again without sudo.')
         commands = {'bash','omarchy','omarchy-shell'}
         if self.needs_library(selected):
             commands.add('quickshell')
         for item in selected:
             commands.update(item['commands'])
         for command in sorted(commands):
-            require(bool(shutil.which(command)), 'Required command: ' + command)
+            require(bool(shutil.which(command)), 'Required command: ' + command, command+' is not installed or not on PATH.')
         require(self.config.is_file() and not self.config.is_symlink(), 'A regular Omarchy shell.json is available.')
         if self.config.is_file():
             try:
@@ -204,7 +296,8 @@ class Installer:
             except (ValueError,OSError):
                 valid = False
             require(valid, 'shell.json is valid and has version 1.')
-        require(not self.prefix.exists() and not self.prefix.is_symlink(), 'Installation receipt directory is unused; existing installs are not overwritten.')
+        require(not self.prefix.exists() and not self.prefix.is_symlink(), 'Installation receipt directory is unused; existing installs are not overwritten.',
+                'An earlier installation or attempt is recorded in '+tilde(self.prefix)+'. Review it with the status action, then move it aside to reinstall.')
         require(os.access(self.config_dir, os.W_OK | os.X_OK), 'Omarchy configuration directory is writable.')
         parent = self.prefix.parent
         while not parent.exists() and parent != parent.parent:
@@ -215,7 +308,8 @@ class Installer:
         for item in selected:
             if item.get('id'):
                 target = self.plugins / item['id']
-                require(not target.exists() and not target.is_symlink(), 'No conflicting installation: ' + item['id'])
+                require(not target.exists() and not target.is_symlink(), 'No conflicting installation: ' + item['id'],
+                        tilde(target)+' already exists. Disable it with omarchy plugin disable '+item['id']+' and move it out of the plugins folder.')
                 manifest = json.loads((self.package/'components'/item['name']/'manifest.json').read_text())
                 require(manifest['id'] == item['id'], 'Packaged manifest matches ' + item['id'])
                 require(manifest.get('velunori',{}).get('dependencies',{}).get('velunori.lib',{}).get('apiVersion') == 1,
@@ -231,7 +325,7 @@ class Installer:
                 require(compatible,'Existing shared library is compatible; it will be retained.')
         if 'omarchy-shell' in commands and shutil.which('omarchy-shell'):
             require(self.query('omarchy-shell','shell','ping') == 'ok', 'Omarchy shell responds.')
-            require(self.query('omarchy-shell','lock','isLocked') == 'false', 'Desktop is unlocked (read-only query).')
+            require(self.query('omarchy-shell','lock','isLocked') == 'false', 'Desktop is unlocked (read-only query).', 'Run the installer from an unlocked desktop terminal.')
             try:
                 inventory=json.loads(self.query('omarchy-shell','shell','listPlugins') or 'null')
                 valid=isinstance(inventory,list) and all(isinstance(p,dict) and isinstance(p.get('id'),str) for p in inventory)
@@ -246,13 +340,28 @@ class Installer:
         if any(x['name']=='lockscreen' for x in selected):
             host=self.omarchy/'shell/plugins/lock/Service.qml'
             bundled=self.package/'components/lockscreen/Service.qml'
-            require(host.is_file() and host.read_bytes()==bundled.read_bytes(),'Serene service matches installed Omarchy byte for byte.')
+            require(host.is_file() and host.read_bytes()==bundled.read_bytes(),'Serene service matches installed Omarchy byte for byte.',
+                    'Your Omarchy version changed the lock service. Leave out lockscreen until Serene is updated.')
             require(self.pam.is_file() and os.access(self.pam,os.R_OK),'Omarchy PAM configuration exists; authentication is not invoked.')
         if any(x['name']=='theme' for x in selected):
             previous=self.query('omarchy','theme','current')
             require(bool(previous) and previous!='Unknown','Current theme is identifiable for recovery.')
         if cloud:
             require(importlib.util.find_spec('venv') is not None and importlib.util.find_spec('ensurepip') is not None,'Python venv/pip support is available.')
+        ui=self.ui
+        if not quiet or failures:
+            ui.section('Checks')
+            if self.verbose:
+                for message in passed:
+                    ui.out('    '+ui.mark('ok')+' '+ui.dim(message))
+            for message,hint in failures:
+                ui.out('    '+ui.mark('fail')+' '+message)
+                if hint: ui.out('      '+ui.dim(hint))
+            total=len(passed)+len(failures)
+            if failures:
+                ui.out('    '+ui.bad(f'{len(failures)} of {total} checks failed')+ui.dim(' · nothing was changed'))
+            else:
+                ui.out('    '+ui.mark('ok')+' '+f'All {total} checks passed'+ui.dim('' if self.verbose else ' · --verbose lists them'))
         return not failures
 
     @contextmanager
@@ -271,12 +380,14 @@ class Installer:
     def save(self, receipt):
         atomic_write(self.receipt,(json.dumps(receipt,indent=2)+'\n').encode())
 
-    def wait_for(self, predicate):
-        for _ in range(30):
+    def wait_for(self, predicate, seconds=90):
+        deadline=time.monotonic()+seconds
+        while True:
             if predicate():
                 return True
-            time.sleep(.2)
-        return False
+            if time.monotonic()>=deadline:
+                return False
+            time.sleep(.5)
 
     def inventory_ready(self, selected, enabled=False):
         try:
@@ -286,13 +397,18 @@ class Installer:
             return False
 
     def install(self, selected, cloud=False, confirm=input, bootstrap=None):
+        ui=self.ui
         self.plan(selected,cloud)
         if not self.check(selected,cloud):
             raise ValueError('Prerequisite checks failed. Nothing was installed.')
-        if confirm('Type INSTALL to apply this plan: ') != 'INSTALL':
-            raise ValueError('Installation cancelled.')
+        ui.out()
+        ui.out('    '+ui.dim('Nothing changes until you confirm. The shell restarts during installation;'))
+        ui.out('    '+ui.dim('no system update runs and no accounts are connected.'))
+        ui.out()
+        if confirm('  Type '+ui.strong('INSTALL')+' to continue '+ui.mark('arrow')+' ').strip() != 'INSTALL':
+            raise ValueError('Installation cancelled. Nothing was changed.')
         with self.lock():
-            if not self.check(selected,cloud):
+            if not self.check(selected,cloud,quiet=True):
                 raise ValueError('Prerequisites changed; nothing was installed.')
             before=self.config.read_bytes()
             before_doc=json.loads(before)
@@ -301,6 +417,9 @@ class Installer:
             self.prefix.mkdir(parents=True,mode=0o700)
             (self.prefix/'backups').mkdir(mode=0o700)
             atomic_write(self.prefix/'backups/shell.before.json',before)
+            self.log=open(self.prefix/'install.log','a',encoding='utf-8')
+            os.chmod(self.prefix/'install.log',0o600)
+            ui.section('Installing')
             receipt={'schemaVersion':1,'version':self.catalog['version'],'build':self.verify(),'id':uuid.uuid4().hex,
                      'components':[x['name'] for x in selected],'cloud':cloud,'phase':'preparing',
                      'previousTheme':previous_theme,'owned':[]}
@@ -309,10 +428,13 @@ class Installer:
                 shutil.copyfile(bootstrap,self.prefix/'installer.sh')
                 (self.prefix/'installer.sh').chmod(0o600)
             created=[]
+            copying=None
             config_changed=False
             theme_attempted=False
             try:
                 self.plugins.mkdir(parents=True,exist_ok=True)
+                copying=ui.step('Copy and validate components')
+                progress=copying.__enter__()
                 with tempfile.TemporaryDirectory(prefix='.velunori-stage-',dir=self.plugins) as temporary:
                     stage=Path(temporary)
                     names=[x['name'] for x in selected if x.get('id')]
@@ -333,12 +455,18 @@ class Installer:
                         created.append(target)
                         receipt['owned'].append(target_name)
                         self.save(receipt)
+                    progress['detail']=f'{len(names)} folders'
+                copying.__exit__(None,None,None); copying=None
                 if cloud:
-                    if self.run('bash',self.plugins/'velunori.clock/scripts/setup-deps.sh',timeout=900).returncode:
-                        raise ValueError('Calendar dependency setup failed.')
+                    with ui.step('Download calendar libraries'):
+                        if self.run('bash',self.plugins/'velunori.clock/scripts/setup-deps.sh',timeout=900).returncode:
+                            raise ValueError('Calendar dependency setup failed. Details: '+tilde(self.prefix/'install.log'))
                 if selected and any(x.get('id') for x in selected):
-                    if self.run('omarchy-shell','shell','rescanPlugins').returncode or not self.wait_for(lambda:self.inventory_ready(selected)):
-                        raise ValueError('Plugin discovery did not complete.')
+                    with ui.step('Register plugins with the shell'):
+                        # A rescan reported as timed out may still have run; the inventory decides.
+                        self.run('omarchy-shell','shell','rescanPlugins',timeout=60)
+                        if not self.wait_for(lambda:self.inventory_ready(selected)):
+                            raise ValueError('Plugin discovery did not complete.')
                 if self.config.read_bytes()!=before:
                     raise ValueError('Shell configuration changed during preparation; it was not overwritten.')
                 if after != before:
@@ -346,18 +474,23 @@ class Installer:
                     config_changed=True
                 receipt['phase']='activating';self.save(receipt)
                 if any(x.get('id') for x in selected):
-                    if self.run('omarchy','restart','shell').returncode or not self.wait_for(lambda:self.query('omarchy-shell','shell','ping')=='ok' and self.inventory_ready(selected,True)):
-                        raise ValueError('Selected plugins did not become enabled after shell restart.')
+                    with ui.step('Restart the shell with Velunori'):
+                        if self.run('omarchy','restart','shell').returncode or not self.wait_for(lambda:self.query('omarchy-shell','shell','ping')=='ok' and self.inventory_ready(selected,True)):
+                            raise ValueError('Selected plugins did not become enabled after shell restart.')
                 if any(x['name']=='theme' for x in selected):
-                    shutil.copytree(self.package/'components/theme',self.prefix/'theme')
-                    theme_attempted=True
-                    if self.run('bash',self.prefix/'theme/scripts/install-local.sh',timeout=120).returncode:
-                        raise ValueError('Dusk theme activation failed.')
+                    with ui.step('Apply the Dusk theme'):
+                        shutil.copytree(self.package/'components/theme',self.prefix/'theme')
+                        theme_attempted=True
+                        if self.run('bash',self.prefix/'theme/scripts/install-local.sh',timeout=120).returncode:
+                            raise ValueError('Dusk theme activation failed.')
                 receipt['phase']='installed';self.save(receipt)
-                print('Installed. Receipt and recovery snapshot: '+str(self.prefix))
-                print('No account was connected, desktop locked, or system update run.')
+                self.finish(selected,cloud)
                 return 0
             except (OSError,ValueError,subprocess.SubprocessError) as error:
+                if locals().get('copying') is not None:
+                    try: copying.__exit__(type(error),error,None)
+                    except BaseException: pass
+                ui.section('Rolling back')
                 safe=self.config.read_bytes() in (before,after)
                 restored=not config_changed
                 if safe and config_changed:
@@ -387,13 +520,49 @@ class Installer:
                     if self.run('omarchy','theme','set',previous_theme).returncode:
                         receipt['phase']='needs-recovery'
                 receipt['error']=str(error);self.save(receipt)
-                raise ValueError(str(error)+' Recovery information: '+str(self.prefix)) from error
+                if receipt['phase']=='failed-restored':
+                    ui.out('    '+ui.mark('ok')+' Your previous configuration is back; new files were moved to '+tilde(self.prefix/'recovery'))
+                else:
+                    ui.out('    '+ui.mark('fail')+' Some changes could not be undone automatically; see '+tilde(self.prefix))
+                raise ValueError(str(error)+' Log: '+tilde(self.prefix/'install.log')) from error
+            finally:
+                if self.log:
+                    self.log.close(); self.log=None
+
+    def finish(self, selected, cloud):
+        ui=self.ui; names={x['name'] for x in selected}
+        ui.out()
+        ui.out('  '+ui.mark('ok')+' '+ui.strong('Velunori is installed.'))
+        ui.section('Next')
+        if 'bar' in names:
+            ui.out('    '+ui.mark('arrow')+' Click the Velunori icon at the end of the bar to choose Island or Orbit.')
+        if 'clock' in names:
+            ui.out('    '+ui.mark('arrow')+' Open the calendar from the clock'+(' and connect Google or iCloud there.' if cloud else '.'))
+        if 'lockscreen' in names:
+            ui.out('    '+ui.mark('arrow')+' Preview the lock screen safely: '+ui.accent('omarchy-shell lock preview'))
+        ui.out('    '+ui.mark('arrow')+' Status and recovery: '+ui.accent('bash '+tilde(self.prefix/'installer.sh')+' status'))
+        ui.out()
 
     def status(self):
+        ui=self.ui
+        ui.header(self.catalog['version'])
         if not self.receipt.is_file():
-            print('No managed installation at '+str(self.prefix));return 0
+            ui.out(); ui.out('    '+ui.dim('No managed installation at '+tilde(self.prefix))); ui.out(); return 0
         receipt=json.loads(self.receipt.read_text())
-        print(json.dumps({key:receipt.get(key) for key in ['version','build','components','cloud','phase']},indent=2))
+        titles={x['name']:x['title'] for x in self.catalog['components']}
+        phase=receipt.get('phase')
+        ui.section('Installation')
+        state=ui.good('installed') if phase=='installed' else ui.bad(str(phase))
+        ui.out('    '+ui.dim('State'.ljust(11))+state)
+        ui.out('    '+ui.dim('Version'.ljust(11))+str(receipt.get('version')))
+        ui.out('    '+ui.dim('Build'.ljust(11))+str(receipt.get('build'))[:12])
+        ui.out('    '+ui.dim('Calendar'.ljust(11))+('Google/iCloud libraries' if receipt.get('cloud') else 'local only'))
+        ui.section('Components')
+        for name in receipt.get('components',[]):
+            ui.out('    '+ui.mark('on')+' '+titles.get(name,name))
+        if receipt.get('error'):
+            ui.section('Last error'); ui.out('    '+receipt['error'])
+        ui.out(); ui.out('    '+ui.dim('Receipt '+tilde(self.receipt))); ui.out()
         return 0
 
 
@@ -405,29 +574,47 @@ def main():
     group.add_argument('--components',help='Comma-separated component names; lib is included automatically')
     parser.add_argument('--cloud',action='store_true',help='Download optional calendar libraries; requires clock')
     parser.add_argument('--prefix',type=Path,help='Permanent installation receipt/backup directory')
+    parser.add_argument('--verbose',action='store_true',help='List every passed check')
     parser.add_argument('--bootstrap-path',type=Path,help=argparse.SUPPRESS)
     args=parser.parse_args()
+    ui=Style()
     try:
         installer=Installer(Path(__file__).resolve().parent,args.prefix)
+        installer.verbose=args.verbose
         if args.action=='status':return installer.status()
         names=args.components.split(',') if args.components is not None else None
         if not names and not args.all:
             if args.action!='install':
                 parser.error('Select --all or --components NAME,NAME.')
-            print('1. Entire suite\n2. Choose components')
-            choice=ask('Choose 1 or 2: ').strip()
+            ui.header(installer.catalog['version'])
+            ui.section('What would you like to install?')
+            ui.out('    '+ui.accent('1')+'  Entire suite '+ui.dim('(recommended)'))
+            ui.out('    '+ui.accent('2')+'  Choose components')
+            ui.out()
+            choice=ask('  Choose 1 or 2 '+ui.mark('arrow')+' ').strip()
             if choice not in ('1','2'):raise ValueError('Choose 1 (entire suite) or 2 (individual components).')
             if choice=='1':args.all=True
             else:
-                print('Available: '+', '.join(x['name'] for x in installer.catalog['components']))
-                names=[value.strip() for value in ask('Components (comma-separated): ').split(',')]
+                components=installer.catalog['components']
+                ui.section('Components')
+                for number,item in enumerate(components,1):
+                    ui.out('    '+ui.accent(str(number).rjust(2))+'  '+item['title'].ljust(26)+ui.dim(item['name']))
+                ui.out()
+                ui.out('    '+ui.dim('The shared library is added automatically.'))
+                answer=ask('  Numbers or names, comma-separated '+ui.mark('arrow')+' ')
+                names=[]
+                for value in (v.strip() for v in answer.split(',') if v.strip()):
+                    names.append(components[int(value)-1]['name'] if value.isdigit() and 1<=int(value)<=len(components) else value)
         selected=installer.select(names,args.all,args.cloud)
         installer.verify()
         if args.action=='plan':installer.plan(selected,args.cloud);return 0
-        if args.action=='check':return 0 if installer.check(selected,args.cloud) else 1
+        if args.action=='check':installer.plan(selected,args.cloud);return 0 if installer.check(selected,args.cloud) else 1
         return installer.install(selected,args.cloud,confirm=ask,bootstrap=args.bootstrap_path)
     except (OSError,ValueError,KeyError,TypeError,EOFError,subprocess.SubprocessError) as error:
-        print('Velunori: '+str(error),file=sys.stderr);return 1
+        err=Style(sys.stderr)
+        err.out(); err.out('  '+err.mark('fail')+' '+err.strong(str(error))); err.out();return 1
+    except KeyboardInterrupt:
+        Style(sys.stderr).out('\n  Cancelled.');return 130
 
 
 if __name__=='__main__':

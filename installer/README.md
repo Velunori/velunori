@@ -15,7 +15,7 @@ bash velunori-install.sh install --components control-center
 bash velunori-install.sh status
 ```
 
-Use `--all` for all nine components, or `--components bar,clock,control-center,...`. The names are in `catalog.json`. `lib` is not a selectable bar/plugin; it is included automatically for every component except the standalone theme. `--cloud` explicitly downloads clock dependencies into its private environment and requires clock selection. Accounts are connected separately from the calendar.
+Checks print a summary, with a hint for each failure; add `--verbose` to list every passed check. Tool output such as pip and theme activation goes to `install.log` in the receipt directory instead of the screen. Use `--all` for all nine components, or `--components bar,clock,control-center,...`. The names are in `catalog.json`. `lib` is not a selectable bar/plugin; it is included automatically for every component except the standalone theme. `--cloud` explicitly downloads clock dependencies into its private environment and requires clock selection. Accounts are connected separately from the calendar.
 
 The website command for the full package is:
 

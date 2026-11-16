@@ -113,7 +113,7 @@ class BootstrapTests(unittest.TestCase):
             output=b'';sent=set();status=None
             try:
                 deadline=time.monotonic()+30
-                answers=[(b'Choose 1 or 2: ',b'2\n'),(b'Components (comma-separated): ',b'control-center\n'),(b'Type INSTALL to apply this plan: ',b'INSTALL\n')]
+                answers=[(b'Choose 1 or 2',b'2\n'),(b'comma-separated',b'control-center\n'),(b'to continue',b'INSTALL\n')]
                 while time.monotonic()<deadline:
                     if select.select([fd],[],[],.1)[0]:
                         try:data=os.read(fd,65536)
@@ -137,7 +137,7 @@ class BootstrapTests(unittest.TestCase):
     def test_piped_plan_accepts_arguments_without_a_terminal(self):
         result=subprocess.run(['bash','-s','--','plan','--all'],input=self.script.read_text(),capture_output=True,text=True,timeout=30)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertIn('Dusk:',result.stdout)
+        self.assertIn('applied immediately',result.stdout)
 
     def test_corrupted_payload_is_rejected(self):
         bad=Path(self.temp.name)/'corrupt.sh';data=self.script.read_bytes();index=data.index(b"<<'__VELUNORI_DATA__'\n")+len(b"<<'__VELUNORI_DATA__'\n")

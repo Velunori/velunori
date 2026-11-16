@@ -49,14 +49,21 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(self.installer.check(self.select(['clock'])))
         self.assertEqual((clock_data/'calendar.sqlite3').read_text(),'keep')
 
+    def test_slow_rescan_reported_as_unresponsive_still_installs(self):
+        # omarchy-shell reports "not responding" while the shell loads new plugins.
+        self.slow_rescan=True
+        self.installer.install(self.select(['clock']),confirm=lambda _:'INSTALL')
+        self.assertEqual(json.loads(self.installer.receipt.read_text())['phase'],'installed')
+
     def run_command(self,*args,capture=False,timeout=60):
         self.calls.append(tuple(map(str,args)))
         code=0
         if tuple(map(str,args[:3]))==('omarchy','restart','shell') and self.fail_restart:
             self.fail_restart=False;code=1
         if str(args[-1]).endswith('setup-deps.sh') and self.fail_cloud:code=1
-        if tuple(map(str,args[:3]))==('omarchy-shell','shell','rescanPlugins') and self.external_change:
-            self.installer.config.write_text('{"version":1,"userChanged":true}')
+        if tuple(map(str,args[:3]))==('omarchy-shell','shell','rescanPlugins'):
+            if self.external_change:self.installer.config.write_text('{"version":1,"userChanged":true}')
+            if getattr(self,'slow_rescan',False):code=1
         return subprocess.CompletedProcess(args,code,stdout='')
 
     def query(self,*args):
