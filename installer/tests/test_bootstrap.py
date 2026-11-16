@@ -9,6 +9,10 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
+import base64
+import io
+import tarfile
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('builder',ROOT/'build.py');builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
@@ -70,6 +74,24 @@ class BootstrapTests(unittest.TestCase):
         digest=self.script.with_suffix('.sh.sha256').read_text().split()[0]
         self.assertEqual(digest,hashlib.sha256(self.script.read_bytes()).hexdigest())
         self.assertEqual(subprocess.run(['bash','-n',str(self.script)]).returncode,0)
+
+    def test_release_google_client_is_embedded_and_integrity_checked(self):
+        payload=b'{"installed":{"client_id":"fixture.apps.googleusercontent.com"}}\n'
+        output=Path(self.temp.name)/'google.sh'
+        with patch.object(builder,'google_client_payload',return_value=payload) as load:
+            builder.build(output,Path('/fixture/desktop-client.json'))
+        load.assert_called_once_with(builder.COMPONENTS/'clock',Path('/fixture/desktop-client.json'))
+        encoded=output.read_text().split("<<'__VELUNORI_DATA__'\n",1)[1].split('\n__VELUNORI_DATA__',1)[0]
+        with tarfile.open(fileobj=io.BytesIO(base64.b64decode(encoded)),mode='r:gz') as archive:
+            name='components/clock/google-oauth.json'
+            self.assertEqual(archive.extractfile(name).read(),payload)
+            integrity=json.loads(archive.extractfile('integrity.json').read())
+            self.assertEqual(integrity['files'][name],hashlib.sha256(payload).hexdigest())
+
+    def test_google_client_requires_a_compatible_clock_pin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(ValueError,'Update the clock component pin'):
+                builder.google_client_payload(Path(temporary),Path('/fixture/desktop-client.json'))
 
     def test_plan_and_help_work_without_omarchy_or_desktop_writes(self):
         with tempfile.TemporaryDirectory() as temporary:

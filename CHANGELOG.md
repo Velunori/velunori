@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0-preview.2 — 2026-11-16
+
+- Adds Google browser sign-in with Velunori's shared Desktop OAuth registration in the published installer; users no longer create their own Google Cloud app.
+- Fixes zero-duration timed events, Google timestamp interpretation and iCloud calendars hosted on Apple's numbered CalDAV servers. Sync failures retain cached events and no longer appear as stale editor errors.
+- Separates calendar management, calendar creation and account connection into bounded views.
+- Updates Dusk's boot-unlock asset to the Velunori wordmark.
+- Publishes English privacy and terms pages linked from the website and records the calendar's live validation evidence.
+
+Validation: changed component checks, copied/symlinked bundle layouts, installer tests and website browser checks. Real Google/iCloud backend tests passed for timed/all-day create/edit/delete, remote changes, ETag conflict rejection and preservation of unrelated properties. This does not certify live recurrence/DST edge cases, offline recovery, long-term token refresh or a fresh full-suite installation. See [calendar live validation](https://github.com/Velunori/clock/blob/main/docs/live-calendar-validation.md).
+
 ## 0.2.0-preview.1 — 2026-11-16
 
 First public preview of the complete Velunori suite.

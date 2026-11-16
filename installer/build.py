@@ -11,6 +11,7 @@ import subprocess
 import shutil
 import re
 import tarfile
+import importlib.util
 
 BOOTSTRAP = r"""#!/usr/bin/env bash
 # Velunori __VERSION__ — self-contained installer preview.
@@ -72,7 +73,17 @@ def runtime_files(source):
             yield relative,path
 
 
-def build(destination):
+def google_client_payload(source, client_file):
+    module_path = source/'google_oauth.py'
+    if not module_path.is_file():
+        raise ValueError('Update the clock component pin to a version with Google browser sign-in first.')
+    spec = importlib.util.spec_from_file_location('velunori_build_google_oauth', module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return (json.dumps(module.load_client(client_file), sort_keys=True, indent=2)+'\n').encode()
+
+
+def build(destination, google_oauth_client=None):
     catalog=json.loads((ROOT/'catalog.json').read_text())
     # Every packaged file comes from a pinned, clean submodule commit.
     sources={'lib':COMPONENTS/'lib'}
@@ -94,6 +105,8 @@ def build(destination):
         provenance[name]={'commit':commit.stdout.strip()}
         for relative,path in runtime_files(source):
             entries[f'components/{name}/{relative.as_posix()}']=(path.read_bytes(),path.stat().st_mode & 0o777)
+    if google_oauth_client is not None:
+        entries['components/clock/google-oauth.json']=(google_client_payload(sources['clock'], google_oauth_client),0o644)
     entries['bootstrap.template']=(BOOTSTRAP.replace('__VERSION__',catalog['version']).encode(),0o644)
     hashes={name:hashlib.sha256(data).hexdigest() for name,(data,_) in entries.items()}
     digest=hashlib.sha256(json.dumps(hashes,sort_keys=True).encode()).hexdigest()
@@ -119,15 +132,16 @@ if __name__=='__main__':
     group=parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--output',type=Path)
     group.add_argument('--site-dir',type=Path,help='Stage the script/checksums into a local website; never deploys')
+    parser.add_argument('--google-oauth-client',type=Path,help='Release-owned Desktop OAuth JSON; embedded for browser sign-in, never account tokens')
     args=parser.parse_args()
     if args.output:
-        build(args.output)
+        build(args.output, args.google_oauth_client)
     else:
         site=args.site_dir.resolve()
         version=json.loads((ROOT/'catalog.json').read_text())['version']
         relative=f'downloads/velunori-{version}.sh'
         target=site/relative
-        build(target)
+        build(target, args.google_oauth_client)
         shutil.copyfile(target,site/'install.sh')
         (site/'install.sh.sha256').write_text(hashlib.sha256(target.read_bytes()).hexdigest()+'  install.sh\n')
         for name in ['index.html','guide.html']:

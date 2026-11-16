@@ -78,3 +78,9 @@ python3 -B -m unittest discover -s installer/tests -v
 ```
 
 Tests use temporary homes, fixture configuration and stand-in commands. The complete generated script is exercised with the real packaged Clock/Control Center sources and native manifest validation, while shell activation is simulated. They verify that only selected directories and the dependency are copied, the stock bar is preserved, stdin confirmation works, and the retained script can report status. No real theme is applied, lock/authentication invoked, accounts connected or system update performed. Native desktop installation and recovery remain pending.
+
+## Google browser sign-in in releases
+
+Once Velunori's Desktop OAuth application is registered with Google, include its configuration at build time with `--google-oauth-client /path/to/velunori-desktop-client.json`. This requires a clock component pin supporting `google_oauth.py`. The configuration stays outside Git and is embedded in the checksummed runtime payload; account tokens are never build inputs. A build without this option keeps Google sign-in unavailable while local calendars and iCloud remain usable. See [the clock maintainer setup](../components/clock/docs/calendar-sync.md).
+
+The embedded registration is the identity/configuration of a public desktop application, not a user's Google authorization. Installed applications cannot keep a desktop client secret confidential; see [Google desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app). Per-user access/refresh tokens and iCloud passwords are never included in the payload or source repositories.

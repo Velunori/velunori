@@ -1,6 +1,6 @@
 # Compatibility and validation record
 
-Checked on **2026-11-16**, using the component revisions pinned by **0.2.0-preview.1**. This document records automated coverage; live desktop certification is pending.
+Checked on **2026-11-16**, using the component revisions pinned by **0.2.0-preview.2**. This document records automated coverage; live desktop certification is pending.
 
 ## Environment
 
@@ -23,21 +23,21 @@ Every row ran the component's own `bash scripts/check.sh` from this repository's
 | --- | --- | --- |
 | lib | `d4f6fee467c79007dc117f45678c01a9776f069e` | Passed |
 | bar | `86d605fa51ddaf0d7154fa201e6ba46c9dc55bf5` | Passed |
-| clock | `f8d54f0c07abc1a4f2def5956459b3542063f441` | Passed, copied and symlinked |
+| clock | `a8e96e15d1ad447697364dfcdbdbc34b55169cfe` | Passed, copied and symlinked |
 | control-center | `e5734acf3465912d5cd1af6ad183f32133758e9d` | Passed, copied and symlinked |
 | notifications | `37fa89991b8d7f7c36b02eeaacd368bffbd565d2` | Passed, copied and symlinked |
 | menu | `a933495c945f6b5c2d958d65600e261566c608e1` | Passed, copied and symlinked |
 | weather | `15b1fe2cf32ac34ea43c43fd60bb509fead16f2a` | Passed, copied and symlinked |
 | update | `7b372c28476fe5add302416427841ae41dd8bae4` | Passed, copied and symlinked |
 | lockscreen | `c50e6cbee7309d5d630dc6f907520f61740008be` | Passed, copied and symlinked |
-| theme | `1d0ff78b9b02edf073511a247523eaf0c47461f9` | Passed, including the palette cross-check against `lib` |
+| theme | `cf96e5ec4fd6dcee87454240938fdfde6809dceb` | Passed, including the palette cross-check against `lib` |
 
 Additional checks:
 
 | Check | Result | Scope |
 | --- | --- | --- |
 | Installer tests | Passed | Temporary homes, fixture configuration and stand-in activation; see [installer validation](../installer/VALIDATION.md) |
-| Calendar Python tests with cloud libraries | All 17 passed | A private environment with the calendar's cloud dependencies; temporary test data and mocks |
+| Calendar Python tests with cloud libraries | All 30 passed | A private environment with the calendar's cloud dependencies; temporary test data and mocks |
 | Website | Passed | Structure, SEO and browser checks of the installer configurator, gallery and responsive layouts |
 
 ## Live validation still needed
@@ -46,7 +46,7 @@ Additional checks:
 | --- | --- | --- |
 | Complete installation | Pending | Unlocked desktop installation through the published script, shell restart, selected components and recovery from the receipt |
 | Real panels and bar | Pending | Placement, clipping, scrolling, touchpad/mouse and keyboard behavior on small monitors and scaled displays |
-| Google / iCloud | Unverified live | Explicit account connection, event create/edit/delete in both directions, recurrence/time zones, conflicts and failed-sync cache retention |
+| Google / iCloud | Live account connection and backend round trips passed | Timed/all-day create/edit/delete, independent remote changes, ETag conflict rejection and preservation of unrelated properties passed. Live recurrence/DST edge cases, offline recovery and long-term refresh remain; see [the detailed record](https://github.com/Velunori/clock/blob/main/docs/live-calendar-validation.md) |
 | Serene | View check passed; live lock/authentication unverified | Service byte comparison and a regular offscreen view passed. No desktop lock or PAM authentication was invoked |
 | Dusk theme | Template checks passed; activation unverified | Palette/Lua checks and Omarchy template rendering in a temporary home passed. The live theme was not applied |
 | Update window | Stand-in checks passed; real update unverified | Backend stand-in and offscreen view passed. No real system update was run |
