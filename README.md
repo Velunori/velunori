@@ -26,6 +26,18 @@ bash install.sh status
 
 Select individual components with `--components bar,clock,control-center`. The shared library is added automatically. Your current bar, theme and lock screen stay unless you select `bar`, `theme` or `lockscreen`. `--cloud` downloads the calendar's Google/iCloud libraries into its private environment; without it the clock and local calendars still work. See the [installer guide](installer/README.md) for ownership, receipts and recovery.
 
+## Update the suite
+
+Download the latest installer to update existing installer-owned plugins:
+
+```bash
+curl -fsSL https://velunori.github.io/install.sh | bash -s -- update
+```
+
+Use `update --components clock` for just Clock & Calendar, or add `--dry-run` to preview. Confirmation is required. Settings, calendar data, accounts and existing cloud libraries are preserved; previous runtime files are backed up. The installer updates its owned shared library alongside selected plugins. Theme updates remain separate. If dependency requirements changed, explicitly add `--cloud` with clock selected. Keep the same `--prefix` for a custom receipt directory.
+
+YAPM/Omarchy's Git updater cannot update the suite installer's copied plugin files. Development links and Git checkouts are refused by this updater: update those source checkouts and their compatible sibling library, then restart the shell. See [ownership and recovery](installer/README.md).
+
 ## What's included
 
 | Component | Role |

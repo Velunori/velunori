@@ -156,6 +156,64 @@ class BootstrapTests(unittest.TestCase):
                     os.kill(pid,9);os.waitpid(pid,0)
                 os.close(fd)
 
+    def test_real_payload_updates_existing_copies_and_preserves_private_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home=Path(temporary);env=self.environment(home)
+            install=subprocess.run(['bash',str(self.script),'install','--components','clock,control-center'],input='yes\n',env=env,capture_output=True,text=True,timeout=30)
+            self.assertEqual(install.returncode,0,install.stdout+install.stderr)
+            plugins=home/'config/omarchy/plugins';clock=plugins/'velunori.clock'
+            (clock/'Widget.qml').write_text('// previous clock fixture\n')
+            (plugins/'velunori.control-center/Widget.qml').write_text('// preserve unselected component\n')
+            environment=clock/'.venv';(environment/'bin').mkdir(parents=True)
+            (environment/'bin/python').write_text('private environment fixture')
+            (clock/'google-oauth.json').write_text('{"fixture":"retained client"}')
+            data=home/'data/velunori/clock';(data/'accounts').mkdir(parents=True)
+            (data/'calendar.sqlite3').write_bytes(b'private calendar fixture')
+            (data/'accounts/fixture.json').write_text('{"token":"fixture-only"}')
+            config=(home/'config/omarchy/shell.json').read_bytes()
+            dry=subprocess.run(['bash',str(self.script),'update','--components','clock','--dry-run'],env=env,capture_output=True,text=True,timeout=30)
+            self.assertEqual(dry.returncode,0,dry.stdout+dry.stderr)
+            self.assertEqual((clock/'Widget.qml').read_text(),'// previous clock fixture\n')
+            update=subprocess.run(['bash',str(self.script),'update','--components','clock'],input='yes\n',env=env,capture_output=True,text=True,timeout=30)
+            self.assertEqual(update.returncode,0,update.stdout+update.stderr)
+            self.assertEqual((clock/'Widget.qml').read_bytes(),(builder.COMPONENTS/'clock/Widget.qml').read_bytes())
+            self.assertEqual((environment/'bin/python').read_text(),'private environment fixture')
+            self.assertEqual((clock/'google-oauth.json').read_text(),'{"fixture":"retained client"}')
+            self.assertEqual((data/'calendar.sqlite3').read_bytes(),b'private calendar fixture')
+            self.assertEqual((data/'accounts/fixture.json').read_text(),'{"token":"fixture-only"}')
+            self.assertEqual((home/'config/omarchy/shell.json').read_bytes(),config)
+            self.assertEqual((plugins/'velunori.control-center/Widget.qml').read_text(),'// preserve unselected component\n')
+            receipt=json.loads((home/'data/velunori/installation/installation.json').read_text())
+            backup=Path(receipt['updates'][-1]['backup'])
+            self.assertEqual((backup/'velunori.clock/Widget.qml').read_text(),'// previous clock fixture\n')
+            self.assertEqual(receipt['phase'],'installed')
+
+    def test_piped_update_reads_confirmation_from_terminal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home=Path(temporary);env=self.environment(home)
+            install=subprocess.run(['bash',str(self.script),'install','--components','clock'],input='yes\n',env=env,capture_output=True,text=True,timeout=30)
+            self.assertEqual(install.returncode,0,install.stdout+install.stderr)
+            pid,fd=pty.fork()
+            if pid==0:
+                os.execvpe('bash',['bash','-c','cat "$1" | bash -s -- update --components clock','_',str(self.script)],env)
+            output=b'';sent=False;status=None
+            try:
+                deadline=time.monotonic()+30
+                while time.monotonic()<deadline:
+                    if select.select([fd],[],[],.1)[0]:
+                        try:output+=os.read(fd,65536)
+                        except OSError:pass
+                        if b'Update Velunori now?' in output and not sent:
+                            os.write(fd,b'y\n');sent=True
+                    done,code=os.waitpid(pid,os.WNOHANG)
+                    if done:status=os.waitstatus_to_exitcode(code);break
+                self.assertEqual(status,0,output.decode(errors='replace'))
+                self.assertTrue(sent)
+                self.assertNotIn(b'Choose 1 or 2',output)
+            finally:
+                if status is None:os.kill(pid,9);os.waitpid(pid,0)
+                os.close(fd)
+
     def test_piped_plan_accepts_arguments_without_a_terminal(self):
         result=subprocess.run(['bash','-s','--','plan','--all'],input=self.script.read_text(),capture_output=True,text=True,timeout=30)
         self.assertEqual(result.returncode,0,result.stderr)

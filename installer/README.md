@@ -48,13 +48,27 @@ The default receipt directory is `${XDG_DATA_HOME:-$HOME/.local/share}/velunori/
 
 A successful receipt records `installed`. It is not proof of live panel placement, account interoperability or the absence of a native host crash.
 
+## Update existing copied plugins
+
+Always download the latest installer; an old retained script still contains its old payload:
+
+```bash
+curl -fsSL https://velunori.github.io/install.sh | bash -s -- update --components clock
+```
+
+Omit `--components` to update all already-installed plugins. `update --dry-run` checks ownership and prerequisites without applying changes. Updates require explicit confirmation and retain shell settings, enabled states, persistent calendars and accounts. YAPM/native Git updates do not apply to the installer's ordinary copied directories. Git checkouts, source links, missing receipts and unowned paths are refused. Use the original `--prefix` when applicable.
+
+The owned shared library is updated with the selected plugins; a compatible unowned library is retained. Theme updates are separate: this command skips the theme and refuses an explicit theme selection. Existing clock cloud libraries are moved into the new runtime. If requirements changed, the updater asks you to explicitly repeat with `--cloud`; this builds a fresh environment and retains the old one for recovery.
+
+Previous runtime directories are retained under the printed private `plugins/.velunori-backup-*` path. Updates replace local runtime edits, keeping the previous files in that backup. Validation happens before replacement. Activation failure restores the old runtime when ownership is unchanged; conflicting ownership or failed recovery records `needs-recovery` and leaves the backup available. Updates never restore or rewrite `shell.json`. Do not remove the receipt or backup while diagnosing a failure. Status reports component versions individually after a partial update.
+
 ## Failure and recovery
 
 Activation failure attempts to restore the saved configuration if it still matches the installer’s expected bytes. A successful restoration moves owned new files into `recovery/`, preserving them rather than deleting them. Concurrent configuration changes or a failed restoration leave files in place and record `needs-recovery`. The script never overwrites another user edit to force rollback.
 
 Review the receipt and printed error before retrying. It deliberately refuses an occupied receipt directory instead of discarding recovery information. For manual recovery, back up the current configuration, review `shell.before.json`, and restore it only when replacing later shell changes is intended. Restart the shell afterward from an unlocked desktop. Theme restoration is separate; the receipt and native theme installer output record the prior theme and any theme-file backup. Calendar data and account credentials are not deleted. Failed private cloud-environment setup is retained with the copied clock files.
 
-Managed in-place upgrades and selection-aware removal are **not implemented yet**. For an ordinary copied feature, use Omarchy's disable/removal commands and its component recovery instructions. Switch to the stock bar before removing Floating Bars. The clock's built-in replacement can be re-enabled explicitly if required. Keep the shared library while another plugin needs it. Existing development links or older source-linked installations require a deliberate migration; this script does not silently replace them.
+Selection-aware removal is **not implemented yet**. For an ordinary copied feature, use Omarchy's disable/removal commands and its component recovery instructions. Switch to the stock bar before removing Floating Bars. The clock's built-in replacement can be re-enabled explicitly if required. Keep the shared library while another plugin needs it. Existing development links or older source-linked installations require a deliberate migration; this script does not silently replace them.
 
 ## Build
 

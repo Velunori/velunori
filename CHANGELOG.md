@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-preview.3 — 2026-11-16
+
+- Add confirmed updates for installer-owned plugin copies, including partial Clock updates, runtime backups and rollback on activation failure.
+- Preserve calendar accounts, events, settings and existing cloud dependencies; document why Git-based plugin updaters cannot update suite copies.
+- Theme updates and coordinated removal remain separate.
+
 ## 0.2.0-preview.2 — 2026-11-16
 
 - Adds Google browser sign-in with Velunori's shared Desktop OAuth registration in the published installer; users no longer create their own Google Cloud app.

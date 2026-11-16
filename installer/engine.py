@@ -274,7 +274,7 @@ class Installer:
         ui.out('    '+ui.dim('Plugins'.ljust(9))+tilde(self.plugins))
         ui.out('    '+ui.dim('Receipt'.ljust(9))+tilde(self.prefix))
 
-    def check(self, selected, cloud=False, quiet=False):
+    def check(self, selected, cloud=False, quiet=False, update_receipt=None):
         self.verify()
         failures = []
         passed = []
@@ -297,8 +297,11 @@ class Installer:
             except (ValueError,OSError):
                 valid = False
             require(valid, 'shell.json is valid and has version 1.')
-        require(not self.prefix.exists() and not self.prefix.is_symlink(), 'Installation receipt directory is unused; existing installs are not overwritten.',
-                'An earlier installation or attempt is recorded in '+tilde(self.prefix)+'. Review it with the status action, then move it aside to reinstall.')
+        if update_receipt is None:
+            require(not self.prefix.exists() and not self.prefix.is_symlink(), 'Installation receipt directory is unused; existing installs are not overwritten.',
+                    'For a completed managed installation, download the latest installer and use its update action. Otherwise review the receipt with status.')
+        else:
+            require(self.prefix.is_dir() and not self.prefix.is_symlink() and not self.receipt.is_symlink(), 'Managed receipt is a regular local installation.')
         require(os.access(self.config_dir, os.W_OK | os.X_OK), 'Omarchy configuration directory is writable.')
         parent = self.prefix.parent
         while not parent.exists() and parent != parent.parent:
@@ -309,21 +312,37 @@ class Installer:
         for item in selected:
             if item.get('id'):
                 target = self.plugins / item['id']
-                require(not target.exists() and not target.is_symlink(), 'No conflicting installation: ' + item['id'],
-                        tilde(target)+' already exists. Disable it with omarchy plugin disable '+item['id']+' and move it out of the plugins folder.')
+                if update_receipt is None:
+                    require(not target.exists() and not target.is_symlink(), 'No conflicting installation: ' + item['id'],
+                            tilde(target)+' already exists. Use update for a managed copied installation; use the source checkout for a development link.')
+                else:
+                    require(self.update_owned(target, update_receipt), 'Installer ownership verified: '+item['id'], 'Git checkouts, development links and unowned folders are not replaced.')
                 manifest = json.loads((self.package/'components'/item['name']/'manifest.json').read_text())
                 require(manifest['id'] == item['id'], 'Packaged manifest matches ' + item['id'])
                 require(manifest.get('velunori',{}).get('dependencies',{}).get('velunori.lib',{}).get('apiVersion') == 1,
                         'Library API declared by ' + item['id'])
         if self.needs_library(selected):
             library = self.plugins/'lib'
+            if update_receipt is not None:
+                require(library.is_dir(),'Existing shared library is available for the update.')
             if library.exists() or library.is_symlink():
                 try:
                     metadata=json.loads((library/'library.json').read_text())
                     compatible=not library.is_symlink() and metadata['id']=='velunori.lib' and metadata['apiVersion']==1 and (1,0,0)<=tuple(map(int,metadata['version'].split('.')))<(2,0,0)
                 except (OSError,ValueError,KeyError,TypeError):
                     compatible=False
-                require(compatible,'Existing shared library is compatible; it will be retained.')
+                require(compatible,'Existing shared library is compatible'+('; it will be retained.' if update_receipt is None or 'lib' not in update_receipt.get('owned',[]) else '.'))
+                if update_receipt is not None and 'lib' in update_receipt.get('owned',[]):
+                    require(self.update_owned(library, update_receipt),'Installer ownership verified: shared library')
+        if update_receipt is not None and any(x['name']=='clock' for x in selected):
+            clock=self.plugins/'velunori.clock'
+            environment=clock/'.venv'
+            require(not environment.is_symlink(),'Calendar environment is not redirected.')
+            if not cloud and environment.exists():
+                old=clock/'requirements.txt';new=self.package/'components/clock/requirements.txt'
+                require(old.is_file() and new.is_file() and old.read_bytes()==new.read_bytes(), 'Existing calendar libraries match the packaged requirements.', 'Repeat update --components clock --cloud to rebuild calendar libraries; the old environment is backed up.')
+            elif not cloud and update_receipt.get('cloud'):
+                require(environment.is_dir(),'Existing cloud calendar environment is available.', 'Repeat update --components clock --cloud to recreate calendar libraries.')
         if 'omarchy-shell' in commands and shutil.which('omarchy-shell'):
             require(self.query('omarchy-shell','shell','ping') == 'ok', 'Omarchy shell responds.')
             require(self.query('omarchy-shell','lock','isLocked') == 'false', 'Desktop is unlocked (read-only query).', 'Run the installer from an unlocked desktop terminal.')
@@ -404,6 +423,132 @@ class Installer:
             inventory=[]
         enabled={p.get('id') for p in inventory if isinstance(p,dict) and p.get('enabled')}
         return [item['id'] for item in selected if item.get('id') and item['id'] not in enabled]
+
+    def update_owned(self, target, receipt):
+        marker=target/'.velunori-owner.json'
+        try:
+            return (target.name in receipt.get('owned',[]) and target.is_dir() and not target.is_symlink()
+                    and not (target/'.git').exists() and not marker.is_symlink()
+                    and json.loads(marker.read_text()).get('installation')==receipt['id'])
+        except (OSError,ValueError,KeyError,TypeError):
+            return False
+
+    def update_receipt(self):
+        if self.prefix.is_symlink() or self.receipt.is_symlink() or not self.receipt.is_file():
+            raise ValueError('No managed copied installation found. Use --prefix for a custom receipt, or update your Git/source installation through its own checkout.')
+        receipt=json.loads(self.receipt.read_text())
+        if not isinstance(receipt,dict) or receipt.get('schemaVersion')!=1 or receipt.get('phase')!='installed':
+            raise ValueError('The installation is unfinished or needs recovery. Review its status and backups before updating.')
+        if not isinstance(receipt.get('components'),list) or not isinstance(receipt.get('id'),str) or not isinstance(receipt.get('owned'),list) or not isinstance(receipt.get('version'),str) or not isinstance(receipt.get('build'),str):
+            raise ValueError('Invalid installation receipt; nothing was updated.')
+        return receipt
+
+    def update(self, selected, cloud=False, confirm=input, bootstrap=None, dry_run=False):
+        receipt=self.update_receipt()
+        receipt_bytes=self.receipt.read_bytes()
+        if json.loads(receipt_bytes)!=receipt:
+            raise ValueError('Installation changed while reading its receipt. Retry the update.')
+        if not selected or any(not x.get('id') or x['name'] not in receipt['components'] for x in selected):
+            raise ValueError('Update selects installed plugin components only. It does not add components or update/apply the standalone theme.')
+        self.verify()
+        ui=self.ui;ui.header(self.catalog['version']);ui.section('Update installed components')
+        for item in selected:ui.out('    '+ui.mark('on')+' '+item['title'])
+        if 'lib' in receipt['owned']:ui.out('    '+ui.mark('on')+' Shared library')
+        ui.out('    '+ui.dim('Bar layout, enabled/disabled state, settings and calendar accounts/data are preserved.'))
+        ui.out('    '+ui.dim('Plugin code is replaced; previous folders and local edits are kept in a backup.'))
+        ui.out('    '+ui.dim('Standalone theme files and theme selection are not changed.'))
+        if cloud:ui.out('    '+ui.dim('Calendar libraries will be rebuilt; this downloads dependencies.'))
+        if not self.check(selected,cloud,update_receipt=receipt):
+            raise ValueError('Update prerequisite checks failed. Nothing was updated.')
+        if dry_run:return 0
+        if confirm('  Update Velunori now? '+ui.strong('[y/N]')+' '+ui.mark('arrow')+' ').strip().lower() not in ('y','yes'):
+            raise ValueError('Update cancelled. Nothing was changed.')
+        with self.lock():
+            if self.receipt.read_bytes()!=receipt_bytes or not self.check(selected,cloud,quiet=True,update_receipt=receipt):
+                raise ValueError('Installation changed before the update. Nothing was updated.')
+            original=copy.deepcopy(receipt)
+            identifier=uuid.uuid4().hex
+            backup=self.plugins/('.velunori-backup-'+identifier)
+            backup.mkdir(mode=0o700)
+            atomic_write(backup/'installation.before.json',receipt_bytes)
+            atomic_write(backup/'shell.before.json',self.config.read_bytes())
+            if (self.prefix/'installer.sh').is_file():shutil.copy2(self.prefix/'installer.sh',backup/'installer.before.sh')
+            self.log=open(self.prefix/'install.log','a',encoding='utf-8');os.chmod(self.prefix/'install.log',0o600)
+            build=self.verify();replacements=[];bootstrap_replaced=False
+            receipt['phase']='updating'
+            receipt['pendingUpdate']={'id':identifier,'backup':str(backup),'components':[x['name'] for x in selected]}
+            targets=[('lib','lib')] if 'lib' in receipt['owned'] else []
+            targets.extend((x['name'],x['id']) for x in selected)
+            try:
+                self.save(receipt)
+                with tempfile.TemporaryDirectory(prefix='.velunori-update-',dir=self.plugins) as temporary:
+                    stage=Path(temporary)
+                    for name,target_name in targets:
+                        shutil.copytree(self.package/'components'/name,stage/target_name)
+                        atomic_write(stage/target_name/'.velunori-owner.json',json.dumps({'installation':receipt['id'],'build':build}).encode())
+                        if name!='lib' and self.run('omarchy','plugin','validate',stage/target_name).returncode:
+                            raise ValueError('Native manifest validation failed: '+name)
+                        if name=='clock' and not (stage/target_name/'google-oauth.json').exists():
+                            client=self.plugins/target_name/'google-oauth.json'
+                            if client.is_symlink():raise ValueError('Calendar OAuth configuration is redirected; nothing was replaced.')
+                            if client.is_file():shutil.copy2(client,stage/target_name/'google-oauth.json')
+                    # Validate every folder before replacing any of them.
+                    for name,target_name in targets:
+                        target=self.plugins/target_name
+                        if not self.update_owned(target,original):raise ValueError('Plugin ownership changed during preparation: '+target_name)
+                        entry={'name':target_name,'moved':False,'placed':False,'venvMoved':False}
+                        replacements.append(entry)
+                        target.rename(backup/target_name);entry['moved']=True
+                        (stage/target_name).rename(target);entry['placed']=True
+                        environment=backup/target_name/'.venv'
+                        if environment.exists() and not (name=='clock' and cloud):
+                            environment.rename(target/'.venv');entry['venvMoved']=True
+                        receipt['pendingUpdate']['replacements']=copy.deepcopy(replacements);self.save(receipt)
+                if cloud and self.run('bash',self.plugins/'velunori.clock/scripts/setup-deps.sh',timeout=900).returncode:
+                    raise ValueError('Calendar dependency setup failed.')
+                with ui.step('Reload updated plugins'):
+                    self.run('omarchy-shell','shell','rescanPlugins',timeout=60)
+                    if self.run('omarchy','restart','shell').returncode or not self.wait_for(lambda:self.query('omarchy-shell','shell','ping')=='ok' and self.inventory_ready(selected)):
+                        raise ValueError('Updated plugins did not load after the shell restart.')
+                versions=receipt.setdefault('componentVersions',{name:{'version':original['version'],'build':original['build']} for name in original['components']})
+                for item in selected:versions[item['name']]={'version':self.catalog['version'],'build':build}
+                receipt.update(version=self.catalog['version'],build=build,cloud=bool(original.get('cloud') or cloud),phase='installed')
+                receipt.pop('pendingUpdate',None);receipt.pop('error',None)
+                receipt.setdefault('updates',[]).append({'id':identifier,'components':[x['name'] for x in selected],'backup':str(backup),'version':self.catalog['version']})
+                if bootstrap:
+                    atomic_write(self.prefix/'installer.sh',Path(bootstrap).read_bytes())
+                    bootstrap_replaced=True
+                self.save(receipt)
+                ui.out('    '+ui.mark('ok')+' Selected plugins updated. Previous files: '+tilde(backup))
+                return 0
+            except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError,KeyboardInterrupt) as error:
+                restored=True
+                for entry in replacements:
+                    if not entry['moved']:continue
+                    target=self.plugins/entry['name']
+                    if target.exists() and not (entry['placed'] and self.update_owned(target,receipt) and json.loads((target/'.velunori-owner.json').read_text()).get('build')==build):
+                        restored=False
+                if restored:
+                    failed=backup/'failed';failed.mkdir(exist_ok=True)
+                    try:
+                        for entry in reversed(replacements):
+                            target=self.plugins/entry['name'];previous=backup/entry['name']
+                            if entry['venvMoved'] and (target/'.venv').exists():(target/'.venv').rename(previous/'.venv')
+                            if entry['placed'] and target.exists():target.rename(failed/entry['name'])
+                            if entry['moved']:previous.rename(target)
+                        if bootstrap_replaced:
+                            retained=backup/'installer.before.sh'
+                            if retained.is_file():atomic_write(self.prefix/'installer.sh',retained.read_bytes())
+                            else:(self.prefix/'installer.sh').rename(failed/'installer.failed.sh')
+                        restored=self.run('omarchy','restart','shell').returncode==0
+                    except (OSError,subprocess.SubprocessError):restored=False
+                original['phase']='installed' if restored else 'needs-recovery'
+                original['error']='Update failed; '+('previous plugin folders restored.' if restored else 'review update backups before continuing.')
+                original['lastUpdateBackup']=str(backup);self.save(original)
+                if isinstance(error,KeyboardInterrupt):raise
+                raise ValueError(str(error)+' '+original['error']+' Backup: '+str(backup)) from error
+            finally:
+                self.log.close();self.log=None
 
     def install(self, selected, cloud=False, confirm=input, bootstrap=None):
         ui=self.ui
@@ -572,7 +717,8 @@ class Installer:
         ui.out('    '+ui.dim('Calendar'.ljust(11))+('Google/iCloud libraries' if receipt.get('cloud') else 'local only'))
         ui.section('Components')
         for name in receipt.get('components',[]):
-            ui.out('    '+ui.mark('on')+' '+titles.get(name,name))
+            version=receipt.get('componentVersions',{}).get(name,{}).get('version',receipt.get('version'))
+            ui.out('    '+ui.mark('on')+' '+titles.get(name,name)+ui.dim(' · '+str(version)))
         if receipt.get('error'):
             ui.section('Last error'); ui.out('    '+receipt['error'])
         ui.out(); ui.out('    '+ui.dim('Receipt '+tilde(self.receipt))); ui.out()
@@ -581,13 +727,14 @@ class Installer:
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',nargs='?',default='install',choices=['plan','check','install','status'])
+    parser.add_argument('action',nargs='?',default='install',choices=['plan','check','install','status','update'])
     group=parser.add_mutually_exclusive_group()
     group.add_argument('--all',action='store_true')
     group.add_argument('--components',help='Comma-separated component names; lib is included automatically')
     parser.add_argument('--cloud',action='store_true',help='Download optional calendar libraries; requires clock')
     parser.add_argument('--prefix',type=Path,help='Permanent installation receipt/backup directory')
     parser.add_argument('--verbose',action='store_true',help='List every passed check')
+    parser.add_argument('--dry-run',action='store_true',help='Check an update without changing files or restarting the shell')
     parser.add_argument('--bootstrap-path',type=Path,help=argparse.SUPPRESS)
     args=parser.parse_args()
     ui=Style()
@@ -595,6 +742,12 @@ def main():
         installer=Installer(Path(__file__).resolve().parent,args.prefix)
         installer.verbose=args.verbose
         if args.action=='status':return installer.status()
+        if args.dry_run and args.action!='update':parser.error('--dry-run is only supported with update.')
+        if args.action=='update':
+            receipt=installer.update_receipt()
+            names=args.components.split(',') if args.components is not None else [name for name in receipt['components'] if name!='theme']
+            selected=installer.select(names,cloud=args.cloud)
+            return installer.update(selected,args.cloud,confirm=ask,bootstrap=args.bootstrap_path,dry_run=args.dry_run)
         names=args.components.split(',') if args.components is not None else None
         if not names and not args.all:
             if args.action!='install':
