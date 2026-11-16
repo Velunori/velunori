@@ -22,7 +22,7 @@ Every row ran the component's own `bash scripts/check.sh` from this repository's
 | Component | Exact revision | Automated result |
 | --- | --- | --- |
 | lib | `d4f6fee467c79007dc117f45678c01a9776f069e` | Passed |
-| bar | `cb1cafe41b5769543db0a1a3eedfcd279fcfe9cb` | Passed |
+| bar | `86d605fa51ddaf0d7154fa201e6ba46c9dc55bf5` | Passed |
 | clock | `f8d54f0c07abc1a4f2def5956459b3542063f441` | Passed, copied and symlinked |
 | control-center | `e5734acf3465912d5cd1af6ad183f32133758e9d` | Passed, copied and symlinked |
 | notifications | `37fa89991b8d7f7c36b02eeaacd368bffbd565d2` | Passed, copied and symlinked |
