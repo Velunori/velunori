@@ -550,6 +550,9 @@ class Installer:
             ui.out('    '+ui.mark('arrow')+' Open the calendar from the clock'+(' and connect Google or iCloud there.' if cloud else '.'))
         if 'lockscreen' in names:
             ui.out('    '+ui.mark('arrow')+' Preview the lock screen safely: '+ui.accent('omarchy-shell lock preview'))
+        if 'theme' in names:
+            # Plymouth and SDDM live under /usr and need sudo, which this installer never uses.
+            ui.out('    '+ui.mark('arrow')+' Match the boot unlock screen (asks for sudo): '+ui.accent('omarchy-plymouth-set-by-theme velunori'))
         ui.out('    '+ui.mark('arrow')+' Status and recovery: '+ui.accent('bash '+tilde(self.prefix/'installer.sh')+' status'))
         ui.out()
 
