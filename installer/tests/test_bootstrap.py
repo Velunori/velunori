@@ -95,11 +95,11 @@ class BootstrapTests(unittest.TestCase):
             config=json.loads((home/'config/omarchy/shell.json').read_text())
             self.assertEqual(config['bar']['id'],'omarchy.bar')
             self.assertIn('custom.mail',config['bar']['layout']['left'])
-            receipt=json.loads((home/'data/velunori/installation.json').read_text())
+            receipt=json.loads((home/'data/velunori/installation/installation.json').read_text())
             self.assertEqual(receipt['components'],['clock','control-center'])
             self.assertEqual(receipt['phase'],'installed')
             self.assertNotIn('update ',(home/'commands.log').read_text())
-            retained=home/'data/velunori/installer.sh'
+            retained=home/'data/velunori/installation/installer.sh'
             status=subprocess.run(['bash',str(retained),'status'],env=env,capture_output=True,text=True)
             self.assertEqual(status.returncode,0,status.stderr)
             self.assertIn('installed',status.stdout)
@@ -126,7 +126,7 @@ class BootstrapTests(unittest.TestCase):
                     if done:status=os.waitstatus_to_exitcode(code);break
                 self.assertEqual(status,0,output.decode(errors='replace'))
                 self.assertEqual(len(sent),3)
-                receipt=json.loads((home/'data/velunori/installation.json').read_text())
+                receipt=json.loads((home/'data/velunori/installation/installation.json').read_text())
                 self.assertEqual(receipt['components'],['control-center'])
                 self.assertFalse((home/'config/omarchy/plugins/velunori.bar').exists())
             finally:

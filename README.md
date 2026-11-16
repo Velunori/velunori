@@ -51,7 +51,7 @@ The Serene lock screen has a preview that does not lock or accept passwords: `om
 
 ## Recovery
 
-The installer keeps a receipt in `${XDG_DATA_HOME:-$HOME/.local/share}/velunori`, with the exact pre-install shell configuration in `backups/shell.before.json`. A failed activation restores that configuration when it is safe to do so and moves new files aside instead of deleting them. Run `bash install.sh status` to see what was installed. The [installer guide](installer/README.md#failure-and-recovery) covers manual recovery, the theme and the bar.
+The installer keeps a receipt in `${XDG_DATA_HOME:-$HOME/.local/share}/velunori/installation`, with the exact pre-install shell configuration in `backups/shell.before.json`. A failed activation restores that configuration when it is safe to do so and moves new files aside instead of deleting them. Run `bash install.sh status` to see what was installed. The [installer guide](installer/README.md#failure-and-recovery) covers manual recovery, the theme and the bar.
 
 Managed in-place upgrades and selection-aware removal are not implemented yet.
 

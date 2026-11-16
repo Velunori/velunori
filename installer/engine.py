@@ -120,7 +120,8 @@ class Installer:
         self.config_dir = Path(os.environ.get('XDG_CONFIG_HOME', str(self.home / '.config'))) / 'omarchy'
         self.config = self.config_dir / 'shell.json'
         self.plugins = self.config_dir / 'plugins'
-        self.prefix = Path(prefix).expanduser().absolute() if prefix else Path(os.environ.get('XDG_DATA_HOME', str(self.home / '.local/share'))) / 'velunori'
+        # The receipt has its own subdirectory: velunori/ also holds component data such as velunori/clock.
+        self.prefix = Path(prefix).expanduser().absolute() if prefix else Path(os.environ.get('XDG_DATA_HOME', str(self.home / '.local/share'))) / 'velunori' / 'installation'
         self.receipt = self.prefix / 'installation.json'
         self.omarchy = Path(os.environ.get('OMARCHY_PATH', '/usr/share/omarchy'))
         self.pam = Path('/etc/pam.d/omarchy-lock-password')

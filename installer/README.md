@@ -39,7 +39,7 @@ Plugins are staged and natively manifest-validated before activation. The instal
 
 The selected bar is preserved unless `bar` is selected. Known replacement widget slots/settings are retained where applicable; Control Center replaces legacy device controls, while unrelated widgets remain in place. Genuine clone replacements record source-disable/restoration state. The clock replaces its slot without claiming a clone identity it does not declare. The exact selections are shown before confirmation. Dusk applies colors/wallpaper immediately; Serene requires a byte-identical installed lock service and readable existing PAM configuration. Installation does not lock or authenticate.
 
-The default receipt directory is `${XDG_DATA_HOME:-$HOME/.local/share}/velunori`. Override it with `--prefix /permanent/path` and use that same flag for later status checks. The private directory holds:
+The default receipt directory is `${XDG_DATA_HOME:-$HOME/.local/share}/velunori/installation`, separate from component data such as the calendar in `velunori/clock`. Override it with `--prefix /permanent/path` and use that same flag for later status checks. The private directory holds:
 
 - `installation.json`: version, build, selection, ownership, phase and any recovery error.
 - `backups/shell.before.json`: the exact pre-install shell configuration.

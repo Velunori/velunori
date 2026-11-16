@@ -42,6 +42,13 @@ class InstallerTests(unittest.TestCase):
         self.uid=patch.object(engine.os,'geteuid',return_value=1000);self.uid.start();self.addCleanup(self.uid.stop)
         self.installer.run=self.run_command;self.installer.query=self.query
 
+    def test_existing_component_data_does_not_block_installation(self):
+        clock_data=self.home/'data/velunori/clock';clock_data.mkdir(parents=True)
+        (clock_data/'calendar.sqlite3').write_text('keep')
+        self.assertEqual(self.installer.prefix,self.home/'data/velunori/installation')
+        self.assertTrue(self.installer.check(self.select(['clock'])))
+        self.assertEqual((clock_data/'calendar.sqlite3').read_text(),'keep')
+
     def run_command(self,*args,capture=False,timeout=60):
         self.calls.append(tuple(map(str,args)))
         code=0
