@@ -30,7 +30,7 @@ Every row ran the component's own `bash scripts/check.sh` from this repository's
 | weather | `15b1fe2cf32ac34ea43c43fd60bb509fead16f2a` | Passed, copied and symlinked |
 | update | `7b372c28476fe5add302416427841ae41dd8bae4` | Passed, copied and symlinked |
 | lockscreen | `c50e6cbee7309d5d630dc6f907520f61740008be` | Passed, copied and symlinked |
-| theme | `5fc88332f5ea1df6a7faadf65857e419b8e1290f` | Passed, including the palette cross-check against `lib` |
+| theme | `82cd6c9f3e3183882ce0e846371a7233600505b1` | Passed, including the palette cross-check against `lib` |
 
 Additional checks:
 

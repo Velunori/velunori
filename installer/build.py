@@ -66,7 +66,7 @@ def runtime_files(source):
         if path.is_symlink():
             raise ValueError('Source symlinks are not packaged: '+str(path))
         allowed_directory=relative.parts[0] in {'scripts','components','kit','design','assets','backgrounds'}
-        allowed_top=relative.name in {'README.md','LICENSE','THIRD_PARTY_NOTICES.md','manifest.json','library.json','requirements.txt','qmldir','colors.toml','hyprland.lua','chromium.theme'} or relative.suffix in {'.qml','.js','.py'}
+        allowed_top=relative.name in {'README.md','LICENSE','THIRD_PARTY_NOTICES.md','manifest.json','library.json','requirements.txt','qmldir','colors.toml','hyprland.lua','chromium.theme','icons.theme','preview.png','preview-unlock.png','unlock.png'} or relative.suffix in {'.qml','.js','.py'}
         allowed_suffix=relative.suffix in {'.qml','.js','.mjs','.py','.sh','.svg','.png','.jpg','.jpeg','.webp','.toml','.lua','.theme','.txt'} or relative.name=='qmldir'
         if path.is_file() and not relative.name.startswith('.') and ((len(relative.parts)==1 and allowed_top) or (allowed_directory and allowed_suffix)):
             yield relative,path
