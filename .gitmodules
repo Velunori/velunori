@@ -1,6 +1,3 @@
-[submodule "components/core"]
-	path = components/core
-	url = https://github.com/Velunori/core.git
 [submodule "components/clock"]
 	path = components/clock
 	url = https://github.com/Velunori/clock.git
@@ -25,3 +22,9 @@
 [submodule "components/update"]
 	path = components/update
 	url = https://github.com/Velunori/update.git
+[submodule "components/lib"]
+	path = components/lib
+	url = https://github.com/Velunori/lib.git
+[submodule "components/bar"]
+	path = components/bar
+	url = https://github.com/Velunori/bar.git

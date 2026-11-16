@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "version": "0.2.0-preview.1",
+  "library": {
+    "id": "velunori.lib",
+    "apiVersion": 1,
+    "version": "1.0.0"
+  },
+  "components": [
+    {
+      "name": "bar",
+      "title": "Floating Bars",
+      "id": "velunori.bar",
+      "commands": [],
+      "section": null
+    },
+    {
+      "name": "clock",
+      "title": "Clock & Calendar",
+      "id": "velunori.clock",
+      "commands": [],
+      "section": "center",
+      "replaces": "omarchy.clock"
+    },
+    {
+      "name": "control-center",
+      "title": "Control Center",
+      "id": "velunori.control-center",
+      "commands": [
+        "pactl",
+        "ip",
+        "hyprctl"
+      ],
+      "section": "right",
+      "replaces": "omarchy.indicators",
+      "clone": true
+    },
+    {
+      "name": "notifications",
+      "title": "Notifications",
+      "id": "velunori.notifications",
+      "commands": [],
+      "section": "right",
+      "replaces": "omarchy.notifications",
+      "clone": true
+    },
+    {
+      "name": "menu",
+      "title": "Menu",
+      "id": "velunori.menu",
+      "commands": [],
+      "section": "left",
+      "replaces": "omarchy.menu",
+      "clone": true
+    },
+    {
+      "name": "weather",
+      "title": "Weather",
+      "id": "velunori.weather",
+      "commands": [
+        "curl"
+      ],
+      "section": "right",
+      "replaces": "omarchy.weather",
+      "clone": true
+    },
+    {
+      "name": "update",
+      "title": "Update window",
+      "id": "velunori.update",
+      "commands": [
+        "systemd-run",
+        "checkupdates",
+        "omarchy-update"
+      ],
+      "section": "center",
+      "replaces": "omarchy.system-update",
+      "clone": true
+    },
+    {
+      "name": "lockscreen",
+      "title": "Serene lock screen",
+      "id": "velunori.lockscreen",
+      "commands": [],
+      "section": null,
+      "replaces": "omarchy.lock",
+      "clone": true
+    },
+    {
+      "name": "theme",
+      "title": "Dusk theme & wallpaper",
+      "commands": [
+        "hyprctl"
+      ],
+      "section": null
+    }
+  ]
+}
